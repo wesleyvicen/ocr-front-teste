@@ -36,6 +36,8 @@
   tr.baixa td { background: var(--bad); }
   .flag { font-weight: 700; }
   .flag.H { color: var(--hi); } .flag.L { color: var(--lo); }
+  .field { display: block; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .field select { display: block; width: 100%; margin-top: 4px; padding: 8px; font: inherit; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; background: #fff; }
   .hdr { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 14px; margin-bottom: 14px; font-size: 14px; }
   .hdr span { color: var(--muted); }
   .legend { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
@@ -55,6 +57,13 @@
 
 <main>
   <section class="card">
+    <label class="field">Equipamento
+      <select id="equip">
+        <option value="auto">Detectar automaticamente</option>
+        <option value="hematoclin-3.0">Hematoclin 3.0</option>
+        <option value="abx-micros-es60">ABX Micros ES 60</option>
+      </select>
+    </label>
     <div id="drop">
       <strong>Toque para tirar foto ou escolher imagem</strong><br>
       ou arraste a imagem aqui
@@ -99,6 +108,17 @@ const settings = {
 };
 let file = null, data = null;
 
+const equip = $("equip");
+equip.value = localStorage.getItem("ocr_equip") || "auto";
+equip.onchange = () => localStorage.setItem("ocr_equip", equip.value);
+// lista vinda da API: novos equipamentos aparecem sem mudar o frontend
+fetch(settings.url + "/api/equipamentos").then((r) => r.json()).then((list) => {
+  const saved = localStorage.getItem("ocr_equip") || "auto";
+  equip.innerHTML = '<option value="auto">Detectar automaticamente</option>' +
+    list.map((e) => `<option value="${e.id}">${e.nome}</option>`).join("");
+  equip.value = [...equip.options].some((o) => o.value === saved) ? saved : "auto";
+}).catch(() => {});
+
 $("cfgBtn").onclick = () => { $("cfgUrl").value = settings.url; $("cfgKey").value = settings.key; $("cfg").showModal(); };
 $("cfg").addEventListener("close", () => {
   if ($("cfg").returnValue !== "save") return;
@@ -133,12 +153,14 @@ $("send").onclick = async () => {
   try {
     const body = new FormData();
     body.append("file", file);
+    body.append("equipamento", equip.value);
     const r = await fetch(settings.url + "/api/ocr", { method: "POST", body, headers: settings.key ? { "X-API-Key": settings.key } : {} });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.detail || `Erro ${r.status}`);
     data = j;
     render();
-    status(`Lido em ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+    const nome = equip.querySelector(`option[value="${j.equipamento}"]`)?.textContent || j.equipamento;
+    status(`${nome}: lido em ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
   } catch (e) {
     status(e.message === "Failed to fetch" ? "Não foi possível conectar à API." : e.message, true);
   } finally {

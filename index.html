@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OCR Analab</title>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --ink: #1d2433; --muted: #6b7385; --line: #e3e6ec;
+    --accent: #1f5fd1; --hi: #c62828; --lo: #1565c0; --warn: #fff4d6; --bad: #ffe1e1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; }
+  header button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 28px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: .15s; }
+  #drop.over { border-color: var(--accent); background: #eef3fd; color: var(--accent); }
+  #preview { width: 100%; border-radius: 8px; margin-top: 12px; display: none; }
+  .btn { display: inline-block; width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; font-size: 15px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.sec { background: #eef1f6; color: var(--ink); }
+  #status { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 20px; }
+  #status.err { color: var(--hi); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  td.val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  td input { width: 90px; font: inherit; font-weight: 600; padding: 3px 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; }
+  td input:focus { border-color: var(--accent); outline: none; background: #fff; }
+  tr.media td { background: var(--warn); }
+  tr.baixa td { background: var(--bad); }
+  .flag { font-weight: 700; }
+  .flag.H { color: var(--hi); } .flag.L { color: var(--lo); }
+  .hdr { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 14px; margin-bottom: 14px; font-size: 14px; }
+  .hdr span { color: var(--muted); }
+  .legend { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  .actions { display: flex; gap: 8px; } .actions .btn { width: auto; flex: 1; }
+  #empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px; width: min(420px, 92vw); }
+  dialog label { display: block; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  dialog input { width: 100%; padding: 8px; font: inherit; border: 1px solid var(--line); border-radius: 6px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OCR Analab</h1>
+  <button id="cfgBtn" type="button">Configurar API</button>
+</header>
+
+<main>
+  <section class="card">
+    <div id="drop">
+      <strong>Toque para tirar foto ou escolher imagem</strong><br>
+      ou arraste a imagem aqui
+    </div>
+    <input id="file" type="file" accept="image/*" capture="environment" hidden>
+    <img id="preview" alt="">
+    <button id="send" class="btn" disabled>Ler imagem</button>
+    <div id="status"></div>
+  </section>
+
+  <section class="card">
+    <div id="empty">O resultado aparece aqui.</div>
+    <div id="result" hidden>
+      <div id="hdr" class="hdr"></div>
+      <table>
+        <thead><tr><th>Parâmetro</th><th>Valor</th><th>Unidade</th><th>Flag</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p class="legend">Confira antes de usar:<i style="background:var(--warn)"></i>confiança média<i style="background:var(--bad)"></i>confiança baixa. Valores são editáveis.</p>
+      <div class="actions">
+        <button id="copy" class="btn sec">Copiar JSON</button>
+        <button id="csv" class="btn sec">Baixar CSV</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="cfg">
+  <form method="dialog">
+    <strong>Configuração da API</strong>
+    <label>URL da API<input id="cfgUrl" placeholder="https://ocr-api.wesleyv.online"></label>
+    <label>API key<input id="cfgKey" type="password" autocomplete="off"></label>
+    <button class="btn" value="save">Salvar</button>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const settings = {
+  get url() { return (localStorage.getItem("ocr_url") || window.OCR_API_URL || "").replace(/\/$/, ""); },
+  get key() { return localStorage.getItem("ocr_key") || ""; },
+};
+let file = null, data = null;
+
+$("cfgBtn").onclick = () => { $("cfgUrl").value = settings.url; $("cfgKey").value = settings.key; $("cfg").showModal(); };
+$("cfg").addEventListener("close", () => {
+  if ($("cfg").returnValue !== "save") return;
+  localStorage.setItem("ocr_url", $("cfgUrl").value.trim());
+  localStorage.setItem("ocr_key", $("cfgKey").value.trim());
+});
+
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files[0]); };
+$("file").onchange = (e) => pick(e.target.files[0]);
+document.addEventListener("paste", (e) => { const f = [...e.clipboardData.files][0]; if (f) pick(f); });
+
+function pick(f) {
+  if (!f || !f.type.startsWith("image/")) return status("Selecione um arquivo de imagem.", true);
+  file = f;
+  $("preview").src = URL.createObjectURL(f);
+  $("preview").style.display = "block";
+  $("send").disabled = false;
+  status("");
+}
+
+function status(msg, err = false) { $("status").textContent = msg; $("status").className = err ? "err" : ""; }
+
+$("send").onclick = async () => {
+  if (!settings.url) { $("cfgBtn").click(); return status("Configure a URL da API.", true); }
+  $("send").disabled = true;
+  status("Lendo imagem…");
+  const t0 = performance.now();
+  try {
+    const body = new FormData();
+    body.append("file", file);
+    const r = await fetch(settings.url + "/api/ocr", { method: "POST", body, headers: settings.key ? { "X-API-Key": settings.key } : {} });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || `Erro ${r.status}`);
+    data = j;
+    render();
+    status(`Lido em ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+  } catch (e) {
+    status(e.message === "Failed to fetch" ? "Não foi possível conectar à API." : e.message, true);
+  } finally {
+    $("send").disabled = false;
+  }
+};
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function render() {
+  $("empty").hidden = true;
+  $("result").hidden = false;
+  $("hdr").innerHTML = data.cabecalho.filter((h) => h.valor)
+    .map((h) => `<div><span>${esc(h.campo)}:</span> <b>${esc(h.valor)}</b></div>`).join("");
+  $("rows").innerHTML = data.resultados.map((x, i) => `
+    <tr class="${x.confianca}">
+      <td>${esc(x.parametro)}</td>
+      <td class="val"><input data-i="${i}" value="${esc(x.valor)}" inputmode="decimal"></td>
+      <td>${esc(x.unidade)}</td>
+      <td class="flag ${x.flag}">${x.flag}</td>
+    </tr>`).join("");
+  $("rows").querySelectorAll("input").forEach((el) => el.oninput = () => { data.resultados[el.dataset.i].valor = el.value.trim(); });
+}
+
+$("copy").onclick = async () => {
+  await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+  status("JSON copiado.");
+};
+
+$("csv").onclick = () => {
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  const lines = [["parametro", "valor", "unidade", "flag", "confianca"].join(";")]
+    .concat(data.resultados.map((x) => [x.parametro, x.valor, x.unidade, x.flag, x.confianca].map(q).join(";")));
+  const id = (data.cabecalho.find((h) => h.campo === "ID") || {}).valor || "amostra";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv" }));
+  a.download = `hemograma-${id}.csv`;
+  a.click();
+};
+</script>
+</body>
+</html>
